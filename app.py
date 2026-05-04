@@ -1,256 +1,137 @@
-"""
-AI University Analytics Agent - Production-Ready
-Final Year University Project
-"""
-
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import numpy as np
+from datetime import datetime
 
-from utils import (
-    detect_columns, validate_dataset, safe_load_data, 
-    clean_data, get_departments, get_semesters
-)
-from analytics import (
-    department_attendance, student_distribution, grade_distribution,
-    department_subject_analysis, student_profile_analysis
-)
-from ai_agent import AIUniversityAgent
+# Custom CSS - Professional SaaS Design
+st.markdown("""
+<style>
+    /* Main Background */
+    .main {background-color: #F8FAFC;}
+    
+    /* Sidebar */
+    .css-1d391kg {background: linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%);}
+    .css-h5rgaw {background: linear-gradient(180deg, #ffffff 0%, #f1f5f9 100%);}
+    
+    /* Navigation Menu */
+    .nav-link {color: #64748b !important; font-weight: 500; padding: 8px 12px;}
+    .nav-link:hover {color: #2563EB !important; background-color: #EFF6FF;}
+    
+    /* Active Page */
+    .nav-link[data-baseweb="tab-list"] [data-baseweb="tab"][aria-selected="true"] {
+        color: #2563EB !important; 
+        background-color: #EFF6FF;
+        border-radius: 8px;
+    }
+    
+    /* Cards */
+    .metric-container {background: white; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);}
+    
+    /* Headers */
+    h1 {color: #1E293B !important; font-size: 2.5rem; font-weight: 700;}
+    h2 {color: #1E293B !important; font-size: 1.75rem; font-weight: 600;}
+    h3 {color: #334155 !important; font-size: 1.25rem; font-weight: 600;}
+    
+    /* Text */
+    .stMarkdown {color: #1E293B;}
+    
+    /* Buttons */
+    .stButton > button {background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%); 
+                       color: white; border-radius: 8px; font-weight: 500;}
+    .stButton > button:hover {background: linear-gradient(135deg, #1D4ED8 0%, #1E40AF 100%);}
+    
+    /* Dataframe */
+    .dataframe {background: white; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);}
+    .dataframe th {background: #F8FAFC; color: #1E293B; font-weight: 600;}
+    
+    /* Selectbox */
+    .stSelectbox > div > div > div {background: white; border: 1px solid #E2E8F0;}
+    
+    /* File Uploader */
+    .uploadedFile {background: #EFF6FF; border: 2px dashed #2563EB; border-radius: 12px;}
+</style>
+""", unsafe_allow_html=True)
 
-# Page config
+# Page Config
 st.set_page_config(
-    page_title="AI University Analytics Agent",
+    page_title="AI University Analytics",
     page_icon="🎓",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for Dark Professional Theme
-st.markdown("""
-    <style>
-    /* Main background */
-    .main {background-color: #0B1F3A;}
-    
-    /* Sidebar */
-    .css-1d391kg {background-color: #1A2D4E;}
-    .css-h5rgaw {background-color: #1A2D4E;}
-    
-    /* Headers */
-    .st-emotion-cache-1gffh {color: #EAEAEA;}
-    .st-emotion-cache-1gffh h1 {color: #4FC3F7;}
-    .st-emotion-cache-1gffh h2 {color: #81D4FA;}
-    .st-emotion-cache-1gffh h3 {color: #B39DDB;}
-    
-    /* Text */
-    .stMarkdown {color: #EAEAEA;}
-    
-    /* Cards */
-    .metric-container {background-color: #1A2D4E; padding: 1rem; border-radius: 10px;}
-    
-    /* Selectbox */
-    .stSelectbox > div > div > div {background-color: #2A3F5F;}
-    
-    /* Buttons */
-    .stButton > button {background-color: #4FC3F7; color: #0B1F3A;}
-    .stButton > button:hover {background-color: #29B6F6;}
-    
-    /* Dataframe */
-    .dataframe {background-color: #1A2D4E;}
-    .dataframe th {background-color: #2A3F5F; color: #EAEAEA;}
-    .dataframe td {color: #CFCFCF;}
-    </style>
-""", unsafe_allow_html=True)
+# Initialize Session State
+if 'df' not in st.session_state:
+    st.session_state.df = None
+if 'column_map' not in st.session_state:
+    st.session_state.column_map = {}
+if 'departments' not in st.session_state:
+    st.session_state.departments = []
+if 'semesters' not in st.session_state:
+    st.session_state.semesters = []
 
-class UniversityAnalyticsApp:
-    def __init__(self):
-        self.df = None
-        self.column_map = {}
-        self.ai_agent = AIUniversityAgent()
-    
-    def initialize_session(self):
-        """Initialize session state"""
-        if 'df' not in st.session_state:
-            st.session_state.df = None
-        if 'column_map' not in st.session_state:
-            st.session_state.column_map = {}
-        if 'departments' not in st.session_state:
-            st.session_state.departments = []
-    
-    def sidebar_file_upload(self):
-        """Professional sidebar file upload"""
-        st.sidebar.markdown("## 📁 Upload Dataset")
-        st.sidebar.markdown("**Supports: CSV, Excel, Parquet**")
-        
-        uploaded_file = st.sidebar.file_uploader(
-            "Choose file", 
-            type=['csv', 'xlsx', 'xls', 'parquet'],
-            help="Upload your university dataset (max 200MB)"
-        )
-        
-        if uploaded_file is not None:
-            try:
-                with st.spinner("🔄 Analyzing dataset structure..."):
-                    self.df = safe_load_data(uploaded_file)
-                    self.column_map = detect_columns(self.df)
-                    validate_dataset(self.df, self.column_map)
-                    
-                    st.session_state.df = self.df
-                    st.session_state.column_map = self.column_map
-                    st.session_state.departments = get_departments(self.df, self.column_map)
-                
-                st.sidebar.success(f"✅ Loaded {len(self.df):,} rows")
-                st.sidebar.metric("Columns", len(self.df.columns))
-                st.sidebar.markdown(f"**Detected Columns:** {', '.join(self.column_map.keys())}")
-                
-            except Exception as e:
-                st.sidebar.error(f"❌ Error: {str(e)}")
-                st.sidebar.info("💡 Ensure your dataset has student/department/marks data")
-        
-        return uploaded_file is not None
-    
-    def display_header(self):
-        """Display professional header"""
-        col1, col2, col3 = st.columns([2, 1, 1])
-        with col1:
-            st.markdown("# 🎓 AI University Analytics Agent")
-            st.markdown("### Production-Ready • Auto Column Detection • Scalable")
-        with col2:
-            if self.df is not None:
-                st.metric("Total Students", f"{len(self.df):,}")
-        with col3:
-            if self.df is not None:
-                st.metric("Departments", len(self.column_map.get('department', [])))
-    
-    def dashboard_page(self):
-        """Main Dashboard - 3 metrics only"""
-        if self.df is None:
-            st.info("👆 Please upload a dataset first")
-            return
-        
-        self.df_clean = clean_data(self.df, self.column_map)
-        
-        # 3 Column Layout
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.markdown("### 📊 Department-wise Attendance")
-            fig1 = department_attendance(self.df_clean, self.column_map)
-            st.plotly_chart(fig1, use_container_width=True)
-        
-        with col2:
-            st.markdown("### 👥 Student Distribution")
-            fig2 = student_distribution(self.df_clean, self.column_map)
-            st.plotly_chart(fig2, use_container_width=True)
-        
-        with col3:
-            st.markdown("### 📈 Grade Distribution")
-            fig3 = grade_distribution(self.df_clean, self.column_map)
-            st.plotly_chart(fig3, use_container_width=True)
-    
-    def department_analysis_page(self):
-        """Department-wise Subject Analysis"""
-        if self.df is None:
-            st.warning("👆 Please upload dataset first")
-            return
-        
-        st.markdown("## 🎯 Department-wise Subject Analysis")
-        
-        col1, col2 = st.columns([1, 3])
-        
-        with col1:
-            dept = st.selectbox(
-                "Select Department",
-                options=self.column_map.get('department', []),
-                key="dept_select"
-            )
-            
-            if dept:
-                semesters = get_semesters(self.df, self.column_map, dept)
-                semester = st.selectbox(
-                    "Select Semester",
-                    options=semesters,
-                    key="semester_select"
-                )
-        
-        if dept and 'semester_select' in st.session_state:
-            filtered_df = self.df[
-                (self.df[self.column_map['department']] == dept) &
-                (self.df[self.column_map.get('semester', 'Semester')] == st.session_state.semester_select)
-            ].copy()
-            
-            if not filtered_df.empty:
-                fig = department_subject_analysis(filtered_df, self.column_map)
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.warning("No data found for selected filters")
-    
-    def student_search_page(self):
-        """Student Profile Search"""
-        if self.df is None:
-            st.warning("👆 Please upload dataset first")
-            return
-        
-        st.markdown("## 🔍 Student Profile Search")
-        
-        col1, col2 = st.columns([1, 3])
-        
-        with col1:
-            student_name = st.text_input(
-                "Search Student Name/ID",
-                placeholder="Enter student name or ID"
-            )
-        
-        if student_name:
-            student_data = self.df[
-                self.df[self.column_map['student']].str.contains(student_name, case=False, na=False)
-            ]
-            
-            if not student_data.empty:
-                st.markdown(f"### 📋 {student_data.iloc[0][self.column_map['student']]}")
-                
-                fig, table = student_profile_analysis(student_data, self.column_map)
-                st.plotly_chart(fig, use_container_width=True)
-                st.dataframe(table, use_container_width=True)
-            else:
-                st.warning("Student not found")
-    
-    def run(self):
-        """Main app runner"""
-        self.initialize_session()
-        
-        # Check if data loaded
-        if 'df' in st.session_state and st.session_state.df is not None:
-            self.df = st.session_state.df
-            self.column_map = st.session_state.column_map
-        
-        # Sidebar
-        data_loaded = self.sidebar_file_upload()
-        
-        # Header
-        self.display_header()
-        
-        # Navigation
-        tab1, tab2, tab3 = st.tabs(["📊 Dashboard", "🎯 Dept Analysis", "🔍 Student Search"])
-        
-        with tab1:
-            self.dashboard_page()
-        
-        with tab2:
-            self.department_analysis_page()
-        
-        with tab3:
-            self.student_search_page()
-        
-        # Footer
-        st.markdown("---")
-        st.markdown("*Built with ❤️ for Final Year Project | Production-Ready AI Analytics*")
+# Sidebar Navigation
+st.sidebar.title("🎓 AI University Analytics")
+st.sidebar.markdown("---")
 
-def main():
-    app = UniversityAnalyticsApp()
-    app.run()
+# Navigation Menu
+nav_options = [
+    "🏠 Home",
+    "📤 Upload & Analyze", 
+    "📊 Dashboard",
+    "📚 Subject Analysis",
+    "🏛️ Department Analytics",
+    "👤 Student Search",
+    "⚖️ Comparison Tool",
+    "🤖 AI Chat Assistant"
+]
 
-if __name__ == "__main__":
-    main()
+selected_page = st.sidebar.radio(
+    "Navigation",
+    options=nav_options,
+    index=0,
+    format_func=lambda x: x
+)
+
+# Header
+col1, col2, col3 = st.columns([2, 1, 1])
+with col1:
+    st.markdown("# 🎓 AI University Analytics Platform")
+    st.markdown("**Professional SaaS Dashboard for University Data Analysis**")
+with col2:
+    if st.session_state.df is not None:
+        st.metric("Total Students", f"{len(st.session_state.df):,}")
+with col3:
+    if st.session_state.df is not None:
+        st.metric("Departments", len(set(st.session_state.departments)))
+
+st.markdown("---")
+
+# Page Routing
+if selected_page == "🏠 Home":
+    st.session_state.current_page = "home"
+    exec(open('pages/1_Home.py').read())
+elif selected_page == "📤 Upload & Analyze":
+    st.session_state.current_page = "upload"
+    exec(open('pages/2_Upload_Analyze.py').read())
+elif selected_page == "📊 Dashboard":
+    st.session_state.current_page = "dashboard"
+    exec(open('pages/3_Dashboard.py').read())
+elif selected_page == "📚 Subject Analysis":
+    st.session_state.current_page = "subjects"
+    exec(open('pages/4_Subject_Analysis.py').read())
+elif selected_page == "🏛️ Department Analytics":
+    st.session_state.current_page = "departments"
+    exec(open('pages/5_Department_Analytics.py').read())
+elif selected_page == "👤 Student Search":
+    st.session_state.current_page = "student"
+    exec(open('pages/6_Student_Search.py').read())
+elif selected_page == "⚖️ Comparison Tool":
+    st.session_state.current_page = "comparison"
+    exec(open('pages/7_Comparison.py').read())
+elif selected_page == "🤖 AI Chat Assistant":
+    st.session_state.current_page = "chat"
+    exec(open('pages/8_AI_Chat.py').read())
